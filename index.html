@@ -136,6 +136,8 @@ textarea.big{width:100%;min-height:300px;font:700 17px var(--body);padding:8px 1
 .opt label{display:flex;align-items:center;gap:4px;font-weight:900;flex:none;cursor:pointer}
 .opt input[type=radio]{width:20px;height:20px;accent-color:var(--ok)}
 .del{background:transparent;border:2px solid #ff9aac;color:#ff9aac;border-radius:10px;padding:2px 10px;font-weight:800;margin-left:auto}
+.mau{width:100%;border-collapse:collapse;margin:8px 0;background:#fff;color:#08254a;border-radius:10px;overflow:hidden;font-weight:800;font-size:15px}
+.mau th,.mau td{border:1px solid #c9d6e8;padding:4px 8px;text-align:center}.mau th{background:#ffe9a8}
 .drop{display:grid;place-items:center;gap:6px;text-align:center;border:4px dashed var(--gold);border-radius:20px;padding:24px 16px;margin-top:12px;cursor:pointer;background:rgba(255,255,255,.05)}
 .drop.over{background:rgba(255,201,60,.15)}
 .msg{font-weight:800;margin-top:10px;min-height:1.3em}
@@ -264,13 +266,16 @@ input[type=range]{width:100%;accent-color:var(--gold)}
         <div class="row"><button class="btn ghost" id="edAdd">＋ Thêm câu hỏi</button><span id="resetBox"></span></div>
       </div>
       <div id="tabWord" hidden>
-        <div class="howto">Chọn file Word (.docx). Mỗi câu ghi "Câu 1: …", mỗi đáp án bắt đầu bằng <b>A. B. C. D.</b>, đáp án đúng đánh dấu bằng <b>in đậm</b>, gạch chân, tô đỏ hoặc dấu <b>*</b>.</div>
+        <div class="howto">Chọn file Word (.docx) soạn theo <b>bảng 6 cột</b>, dòng đầu là tiêu đề:</div>
+        <table class="mau"><tr><th>Mức</th><th>Câu hỏi</th><th>Đáp án đúng</th><th>Sai 1</th><th>Sai 2</th><th>Sai 3</th></tr>
+          <tr><td>Dễ</td><td>3 × 4 = ?</td><td>12</td><td>10</td><td>14</td><td>15</td></tr></table>
+        <div class="howto">Game tự xáo trộn vị trí đáp án thành A, B, C, D. Cột “Mức” có thể để trống; có thể chỉ cần 1 hoặc 2 cột sai. File soạn kiểu cũ (A. B. C. D., đáp án đúng in đậm) vẫn đọc được.</div>
         <label class="drop" id="drop"><input type="file" id="wordFile" accept=".docx" hidden><span style="font-size:42px">📄</span><span class="h2" style="font-size:24px">Bấm để chọn file Word</span><span>hoặc kéo thả file .docx vào đây</span></label>
         <div class="msg" id="wordMsg"></div>
         <div class="row" id="wordAct" hidden><button class="btn" id="wordReplace">✔ Thay toàn bộ bằng các câu này</button><button class="btn ghost" id="wordAppend">＋ Thêm vào sau</button></div>
       </div>
       <div id="tabBulk" hidden>
-        <div class="howto">Dán cả đề: mỗi câu "Câu 1: …", đáp án mỗi dòng "A. …", dấu <b>*</b> trước đáp án đúng.</div>
+        <div class="howto">Bôi đen cả bảng trong Word (gồm dòng tiêu đề), sao chép rồi dán vào đây. Hoặc dán kiểu cũ: mỗi câu "Câu 1: …", đáp án mỗi dòng "A. …", dấu <b>*</b> trước đáp án đúng.</div>
         <textarea class="big" id="bulk" style="margin-top:10px"></textarea>
         <div class="row"><button class="btn" id="bulkApply">✔ Dùng đề này</button></div>
         <div class="msg" id="bulkMsg"></div>
@@ -688,12 +693,58 @@ async function readDocx(buf){
     flushEmph();
     out.forEach(o => lines.push(o));
   }
+  // tables: rows of cell texts (top-level tables only)
+  lines.tables = [];
+  for (const tbl of doc.getElementsByTagNameNS(W, "tbl")){
+    if (tbl.parentNode && tbl.parentNode.localName === "tc") continue;
+    const rows = [];
+    for (const tr of tbl.childNodes){ if (tr.localName !== "tr") continue;
+      const cells = [];
+      for (const tc of tr.childNodes){ if (tc.localName !== "tc") continue;
+        const ps = [...tc.getElementsByTagNameNS(W, "p")].map(p => [...p.getElementsByTagNameNS(W, "t")].map(t => t.textContent).join("")).filter(x => x.trim());
+        cells.push(ps.join(" ")); }
+      rows.push(cells); }
+    lines.tables.push(rows);
+  }
   return lines;
 }
 
 
 
 
+
+/* ---------- table format: Mức | Câu hỏi | Đáp án đúng | Sai 1 | Sai 2 | Sai 3 ---------- */
+const LEVELS = /^(dễ|de|vừa|vua|khó|kho|trung bình|nâng cao)$/i;
+function parseTable(rows){
+  const qs = [], nm = s => String(s || "").replace(/\s+/g, " ").trim();
+  const low = s => nm(s).toLowerCase();
+  let col = null;
+  for (const raw of rows){
+    const r = raw.map(nm);
+    if (!r.some(Boolean)) continue;
+    const L = r.map(low);
+    // header row?
+    const qi = L.findIndex(x => /câu\s*hỏi|đề\s*bài|^câu$|nội\s*dung/.test(x));
+    const ci = L.findIndex(x => /đúng/.test(x));
+    if (qi >= 0 && ci >= 0 && ci !== qi){
+      col = {q:qi, c:ci, lv:L.findIndex(x => /mức|độ\s*khó|cấp\s*độ/.test(x)), w:L.map((x, i) => /sai|nhiễu/.test(x) ? i : -1).filter(i => i >= 0)};
+      if (!col.w.length) col.w = L.map((x, i) => i).filter(i => i > ci);
+      continue;
+    }
+    // no header yet: accept the template's column order when the first cell is a level
+    if (!col && r.length >= 4 && LEVELS.test(r[0])) col = {lv:0, q:1, c:2, w:[3,4,5].filter(i => i < r.length)};
+    if (!col) continue;
+    const q = r[col.q] || "", right = r[col.c] || "";
+    const wrong = col.w.map(i => r[i] || "").filter(Boolean).slice(0, 3);
+    if (!q || !right || !wrong.length) continue;
+    const a = shuffle([right, ...wrong]);
+    const item = {q: q.replace(/^(?:câu|bài)\s*\d+\s*[:.)\-]?\s*/i, ""), a, c: a.indexOf(right)};
+    if (col.lv >= 0 && r[col.lv]) item.lv = r[col.lv];
+    while (item.a.length < 4) item.a.push("");
+    qs.push(item);
+  }
+  return {qs, warn: 0};
+}
 
 /* ======================= HOST ======================= */
 let questions, settings;
@@ -709,7 +760,7 @@ const tname = i => settings.teamNames[i] || TEAMS[i].def;
 
 const S = {phase:"menu", order:[], qi:-1, q:null, qid:0, picks:{}, res:[null,null,null], fast:-1, event:null, deadline:0,
   towers:[], drops:[null,null,null], pose:[{m:"idle",u:0},{m:"idle",u:0},{m:"idle",u:0}], fx:[], scale:1, msg:["","",""], gift:null, rank:null, dropSeq:0};
-const NET = {mq:null, idx:0, room:"", ok:false, seen:[0,0,0], status:"Đang kết nối máy chủ…"};
+const NET = {mq:null, idx:0, room:"", ok:false, seen:[-1e9,-1e9,-1e9], status:"Đang kết nối máy chủ…"};
 let tickT = null;
 
 function newTower(){ return {blocks:[], top:{x:0, w:1}, tang:0, shownTang:0, bounce:0}; }
@@ -1018,7 +1069,7 @@ function renderQ(){
   card.classList.toggle("compact", ["drop","done"].includes(S.phase));
   const ev = {gio:"🌬️ GIÓ LỚN", sieutoc:"⚡ SIÊU TỐC", qua:"🎁 CÓ QUÀ"}[S.event];
   $("qTag").className = "qtag" + (ev ? " ev" : "");
-  $("qTag").textContent = S.phase === "menu" || !q ? "SẴN SÀNG" : (ev ? `CÂU ${S.qi+1} · ${ev}` : `CÂU ${S.qi+1}`);
+  $("qTag").textContent = S.phase === "menu" || !q ? "SẴN SÀNG" : `CÂU ${S.qi+1}` + (q.lv ? ` · ${q.lv.toUpperCase()}` : "") + (ev ? ` · ${ev}` : "");
   $("qCount").textContent = !q ? "Sẵn sàng" : `Câu ${Math.min(S.qi+1, S.order.length)}/${S.order.length}`;
   if (!q){ $("qText").textContent = S.phase === "countdown" ? "Chuẩn bị…" : "Ba tổ đã sẵn sàng xây tháp chưa?"; $("answers").innerHTML = ""; $("rightLine").textContent = ""; return; }
   $("qText").textContent = q.q;
@@ -1137,7 +1188,7 @@ function openMenu(){
 function renderEditor(){
   $("qlist").innerHTML = questions.map((q, n) => `
     <div class="qe ${q.warn ? "warn" : ""}" data-n="${n}">
-      <div class="top2"><span class="n">Câu ${n+1}</span>${q.warn ? `<span style="color:#ffb020;font-weight:800">Chưa rõ đáp án đúng</span>` : ""}<button class="del" data-del="${n}">✕ Xóa</button></div>
+      <div class="top2"><span class="n">Câu ${n+1}</span>${q.lv ? `<span class="chip">${esc(q.lv)}</span>` : ""}${q.warn ? `<span style="color:#ffb020;font-weight:800">Chưa rõ đáp án đúng</span>` : ""}<button class="del" data-del="${n}">✕ Xóa</button></div>
       <textarea data-f="q" rows="1" placeholder="Gõ câu hỏi…">${esc(q.q)}</textarea>
       <div class="opts">${[0,1,2,3].map(i => `<div class="opt"><label><input type="radio" name="c${n}" value="${i}" ${q.c===i?"checked":""}> ${LETTERS[i]}</label>
         <input type="text" data-a="${i}" value="${esc(q.a[i]||"")}" placeholder="Đáp án ${LETTERS[i]}"></div>`).join("")}</div>
@@ -1173,8 +1224,11 @@ async function handleWord(file){
   if (!/\.docx$/i.test(file.name)){ msg.className = "msg bad"; msg.textContent = "Game chỉ đọc được file .docx. File .doc cũ thì mở bằng Word rồi Lưu thành (Save As) → Word Document (.docx)."; return; }
   msg.className = "msg"; msg.textContent = "Đang đọc file…";
   try{
-    const r = parseLines(await readDocx(await file.arrayBuffer()));
-    if (!r.qs.length){ msg.className = "msg bad"; msg.textContent = "Chưa tìm thấy câu trắc nghiệm nào. Mỗi đáp án cần bắt đầu bằng A. B. C. D."; return; }
+    const lines = await readDocx(await file.arrayBuffer());
+    let r = {qs:[], warn:0};
+    for (const t of (lines.tables || [])){ const x = parseTable(t); r.qs = r.qs.concat(x.qs); }
+    if (!r.qs.length) r = parseLines(lines);
+    if (!r.qs.length){ msg.className = "msg bad"; msg.textContent = "Chưa tìm thấy câu hỏi nào. Thầy cô soạn theo bảng: Mức | Câu hỏi | Đáp án đúng | Sai 1 | Sai 2 | Sai 3 (dòng đầu là tiêu đề)."; return; }
     r.qs.forEach(q => delete q.rescue); wordParsed = r.qs;
     msg.className = "msg ok"; msg.textContent = `✔ Đọc được ${r.qs.length} câu từ "${file.name}".` + (r.warn ? ` Có ${r.warn} câu chưa rõ đáp án đúng (tạm chọn A), hiện viền cam để thầy cô sửa.` : "");
     $("wordAct").hidden = false;
@@ -1227,7 +1281,8 @@ function hostMain(){
   $("edSave").onclick = () => { if (!$("tabForm").hidden) readEditor(); save(LS_Q, questions); $("editor").hidden = true; $("qNum").textContent = goodQs().length; };
   wireReset();
   document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => { if (!$("tabForm").hidden) readEditor(); showTab(b.dataset.tab); });
-  $("bulkApply").onclick = () => { const r = parseText($("bulk").value), m = $("bulkMsg");
+  $("bulkApply").onclick = () => { const raw = $("bulk").value, rows = raw.replace(/\r/g, "").split("\n").filter(l => l.split("\t").length >= 3).map(l => l.split("\t"));
+    let r = rows.length ? parseTable(rows) : {qs:[]}; if (!r.qs.length) r = parseText(raw); const m = $("bulkMsg");
     if (!r.qs.length){ m.className = "msg bad"; m.textContent = "Chưa đọc được câu nào, thầy cô xem lại mẫu nhé."; return; } r.qs.forEach(q => delete q.rescue); useParsed(r.qs, true); };
   $("wordFile").onchange = e => handleWord(e.target.files[0]);
   const drop = $("drop");
