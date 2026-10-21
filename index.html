@@ -313,17 +313,14 @@ const ASSETS = {"chars":{"boy_wave":["data:image/webp;base64,UklGRp54AABXRUJQVlA
 const LETTERS = ["A","B","C","D"];
 const LS_Q = "thap_questions_v1", LS_S = "thap_settings_v1", LS_ROOM = "thap_room_v1";
 const SAMPLE = [
-  {q:"6 × 7 = ?", a:["36","42","48","49"], c:1},
-  {q:"56 : 7 = ?", a:["6","7","8","9"], c:2},
-  {q:"Gấp 8 lên 6 lần được bao nhiêu?", a:["48","14","54","2"], c:0},
-  {q:"Giảm 35 đi 5 lần được bao nhiêu?", a:["30","40","175","7"], c:3},
-  {q:"Mỗi hộp có 6 cái bánh. 5 hộp như thế có bao nhiêu cái bánh?", a:["11 cái","25 cái","30 cái","35 cái"], c:2},
-  {q:"7 × 9 = ?", a:["63","56","72","54"], c:0},
-  {q:"Số nào nhân với 7 thì được 49?", a:["6","7","8","9"], c:1},
-  {q:"1 giờ = ? phút", a:["100 phút","24 phút","30 phút","60 phút"], c:3},
-  {q:"42 : 6 = ?", a:["8","6","7","9"], c:2},
-  {q:"Có 28 quả cam chia đều vào 4 giỏ. Mỗi giỏ có mấy quả?", a:["6 quả","7 quả","8 quả","24 quả"], c:1}
+  {q:"3 × 4 × 5 = ?", a:["50","45","60","55"], c:2},
+  {q:"5 × 4 × 4 = ?", a:["80","70","60","85"], c:0},
+  {q:"6 × 2 × 4 = ?", a:["42","48","52","36"], c:1},
+  {q:"2 × 7 × 2 = ?", a:["24","32","26","28"], c:3},
+  {q:"2 × 8 × 2 = ?", a:["24","26","32","28"], c:2}
 ];
+// Đề bài Vận dụng – Toán 3, Bài 23 (tiết 1). Lần đầu mở bản này, game tự nạp đề mới (thay đề cũ lưu trong máy).
+const DECK = "toan3-bai23-van-dung-v1";
 const TEAMS = [
   {col:"#e53935", dark:"#9f1d1a", light:"#ff8a80", keys:["1","2","3","4"], kl:"1 2 3 4", def:"Tổ 1"},
   {col:"#1e6fe0", dark:"#0e3c86", light:"#8ab6ff", keys:["q","w","e","r"], kl:"Q W E R", def:"Tổ 2"},
@@ -750,6 +747,7 @@ function parseTable(rows){
 let questions, settings;
 function hostInit(){
   questions = load(LS_Q) || clone(SAMPLE);
+  if (load("thap_deck") !== DECK){ questions = clone(SAMPLE); save(LS_Q, questions); save("thap_deck", DECK); }
   settings = Object.assign({time:30, diff:"vua", events:true, fz:1, track:"vui", vol:85, music:true, teamNames:TEAMS.map(t => t.def)}, load(LS_S) || {});
   $("app").hidden = false;
 }
